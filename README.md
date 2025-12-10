@@ -1,2 +1,2 @@
 # difflinattn
-image reconstruction and generation with diff linear attention
+A repo for TiTok model variants using differential linear attention for masked image modelling.

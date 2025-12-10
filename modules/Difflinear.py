@@ -1,7 +1,5 @@
-from torch.nn import functional as F
-from torch.nn import Linear, Module, Parameter, Sequential , Dropout , RMSNorm , GELU ,init 
+from torch.nn import functional as F,  Linear, Module, Parameter, Sequential , Dropout , RMSNorm , GELU ,init 
 from torch import exp , Tensor, tensor,  unsqueeze , sqrt 
-from torchvision.transforms import ToTensor, Resize
 
 from typing import Union,Optional,List,Tuple,Sequence, Callable
 
@@ -11,7 +9,7 @@ class DIFFLINattn(Module):
                num_heads: int =16,
                lmbda: float =0.8,
                layer:int =1,
-               kernel:Callable =F.elu) -> None:
+               kernel:Callable =F.elu):
     super().__init__()
     assert embed_dim > 0 and in_features > 0 and num_heads > 0 and layer > 0 , (
         f" none of: \n embed_dim={embed_dim},\n in_features={in_features} ,"
@@ -43,12 +41,12 @@ class DIFFLINattn(Module):
     )
     self.apply(self.init_weights)
   @staticmethod
-  def init_weights(m):
+  def init_weights(m:Union[Module,Sequential])->None:
     if isinstance(m, (Linear)):
       init.orthogonal_(m.weight)
 
   def forward(self,x:Tensor,
-              inverse:bool =False):
+              inverse:bool =False)->Tensor:
     assert len( x.shape ) >= 2, f"expected x with at least 2 dimensions"
     if len(x.shape) == 2:
       x = unsqueeze(x, 1)
