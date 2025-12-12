@@ -8,7 +8,7 @@ https://github.com/CompVis/taming-transformers/blob/master/taming/modules/vqvae/
 
 from Difflinear import DIFFLINattn
 from torch.nn import Embedding, Module
-from torch import  Tensor,matmul , einsum , sum as torchsum , rearrange, argmin , mean ,zeros, exp,log
+from torch import  Tensor, einsum , sum as torchsum, rearrange, argmin , mean ,zeros, exp,log
 
 class VectorQuantizer(Module):
     def __init__(self,codebook_size:int,
