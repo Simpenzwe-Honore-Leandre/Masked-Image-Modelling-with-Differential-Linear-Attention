@@ -1,48 +1,37 @@
-from Difflinear import DIFFLINattn,SDPA
+from modules.attention import DIFFLINattn,SDPA
 from torch.nn import functional as F, Module,Parameter,RMSNorm,Sequential,Conv2d,Linear,Dropout , init
 from torch import randn , Tensor,matmul , concat
 
 class Encoder(Module):
-  def __init__(self, in_features:int,
-               out_features:int,
-               patch_size:int,
-               layers:int,
-               token_size:int,
-               num_latent_tokens:int,
-               image_size:int,
-               num_heads:int,
-               bias:bool=False):
+  def __init__(self,config):
     super().__init__()
-    self.width = out_features
-    self.num_heads= num_heads
+    self.width = config.out_features
+    self.num_heads= config.num_heads
     scale = self.width ** - 0.5
-    self.grid_size = image_size//patch_size
-    self.num_latent_tokens = num_latent_tokens
-    self.token_size = token_size
+    self.grid_size = config.image_size//config.patch_size
+    self.num_latent_tokens = config.num_latent_tokens
+    self.token_size = config.token_size
     self.class_embedding = Parameter(scale * randn(1,self.width))
     self.positional_embeddings = Parameter(scale * randn( self.grid_size ** 2 ,self.width))
     self.latent_token_positional_embeddings = Parameter(scale * \
                                               randn(self.num_latent_tokens ,\
                                               self.width))
-    self.patch_embed = Conv2d(in_features,
-                              out_features,
-                              kernel_size=patch_size,
-                              stride=patch_size)
-    self.prenorm = RMSNorm(in_features)
-    self.postnorm= RMSNorm(out_features)
+    self.patch_embed = Conv2d(config.in_features,
+                              config.out_features,
+                              kernel_size=config.patch_size,
+                              stride=config.conv_stride)
+    self.prenorm = RMSNorm(config.in_features)
+    self.postnorm= RMSNorm(config.out_features)
     self.transformer = Sequential(
-          *[DIFFLINattn(in_features=in_features if i == 0 else out_features,
-                    embed_dim= out_features,
-                    num_heads=self.num_heads,
-                    layer=i+1
-                       ) for i in range(layers)]
+          *[DIFFLINattn(config=config,
+                        layer=i+1,
+                        kernel=F.elu) for i in range(config.num_layers)]
     )
-    self.sequence_pooler = SeqPooler(in_features=out_features,
-                                     bias=bias)#Pooling over all sequences
+    self.sequence_pooler = SeqPooler(config)#Pooling over all sequences
     self.conv_out = Conv2d(self.width,
                            self.token_size,
                            kernel_size=1,
-                           bias=bias)
+                           bias=config.bias)
     self.apply(self.init_weights)
 
   def forward(self,x:Tensor , latent_tokens:Tensor)->Tensor:
@@ -72,12 +61,10 @@ class SeqPooler(Module):
   """
   Sequence Pooling as in https://arxiv.org/pdf/2104.05704
   """
-  def __init__(self,
-               in_features:Tensor,
-               bias:bool=False):
+  def __init__(self,config):
     super().__init__()
-    self.attn_pooler = Linear(in_features,out_features=1,bias=bias)
-    self.dropout = Dropout(0.3)
+    self.attn_pooler = Linear(in_features=config.in_features,out_features=1,bias=config.bias)
+    self.dropout = Dropout(config.dropout)
   def forward(self,x:Tensor)->Tensor:
     return self.dropout(
             matmul( F.softmax(self.attn_pooler(x).transpose(-2,-1)) ,x )
@@ -88,14 +75,10 @@ def _expand_token(token, batch_size: int):
   
   
 class TiTok(Encoder):
-  def __init__(self, in_features: int, out_features: int,num_heads:int, patch_size: int, layers: int, token_size: int, num_latent_tokens: int, image_size: int, bias: bool = False):
-    super().__init__(in_features, out_features, patch_size, layers, token_size, num_latent_tokens, image_size, bias)
+  def __init__(self, config):
+    super().__init__(config)
     self.transformer = Sequential(
-      *[SDPA(in_features=in_features,
-             num_heads= num_heads,
-             embed_dim=out_features,
-             num_latent_tokens=num_latent_tokens,
-             bias=bias) for _ in range(layers)]
+      *[SDPA(config=config) for _ in range(config.num_layers)]
     )
   def forward(self, x: Tensor, latent_tokens: Tensor) -> Tensor:
     return super().forward(x, latent_tokens)
