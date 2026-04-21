@@ -1,0 +1,9 @@
+*.log
+*.desktop*
+*.emacs*
+*~*
+*#*
+.emacs.d
+init.el
+.emacs.desktop.lock
+.emacs.desktop

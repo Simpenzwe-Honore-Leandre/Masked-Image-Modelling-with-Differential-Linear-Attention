@@ -18,7 +18,7 @@ class Decoder(Module):
         self.width = config.out_features
         self.num_heads= config.num_heads
         scale = self.width ** - 0.5
-        self.mask_token =Parameter(scale * torch.randn( 1, 1, self.width))
+        self.mask_tokens =Parameter(scale * torch.randn( 1, 1, self.width))
         self.grid_size = config.image_size//config.patch_size
         self.token_size = config.token_size
         self.class_embedding = Parameter(scale * torch.randn(1,self.width))
@@ -59,8 +59,17 @@ class Decoder(Module):
       mask_tokens += self.positional_embeddings.to(mask_tokens.dtype)
       x += self.latent_token_positional_embeddings[:seq_len]
       x += torch.cat([mask_tokens,x],dim=1)
-      x  = self.prenorm(x) # N, num_latent_tokens+ grid**2+1,width
-      x = x.permute(1,0,2) # num_latent_tokens+ grid**2+1, N, width
+      x  = self.prenorm(x) # N,  1+grid**2+num_latent_tokens,width
+      x = x.permute(1,0,2) #  1+grid**2+ num_latent_tokens, N, width
 
       x = self.transformer( x )
+      x = x.permute(1,0,2) # N, 1+grid**2+num_latent_tokens,width
+      x = x[:,1:1+self.grid_size**2] #remove class embeddging
+      x = self.postnorm( x )
+      
+      # N, grid_size **2 , width -> N , width, grid_size,grid_size
+      x = x.permute(0,2,1).reshape(batch_size,self.width, self.grid_size,self.grid_size)
+      x= self.ffn( x.contiguous() )
+      x= self.conv_out( x )
+      return x
       
