@@ -7,7 +7,7 @@ https://github.com/CompVis/taming-transformers/blob/master/taming/modules/vqvae/
 
 import torch
 import torch.nn as nn
-from torch import Tensor
+import einops
 
 
 class VectorQuantizer(nn.Module):
@@ -21,14 +21,14 @@ class VectorQuantizer(nn.Module):
         self.codebook = nn.Embedding(codebook_size,token_size)
         self.codebook.weight.data.uniform_(-1.0 / self.codebook_size , 1.0/ self.codebook_size)
         
-    def forward(self,x:Tensor)->Tensor:
-        x = torch.rearrange(x,'b c h w -> b h w c').contiguous()
+    def forward(self,x:torch.Tensor)->torch.Tensor:
+        x = einops.rearranget(x,'b c h w -> b h w c').contiguous()
         x_flattened = x.view(-1,self.token_size)
         
         # d.shape = [ */token_size, token_size] 
         d = torch.sum(x_flattened**2 , dim=1,keepdim=True) + \
             torch.sum(self.codebook.weight**2,dim=1) - 2  * \
-            torch.einsum('bd,dn->bn',x_flattened, torch.rearrange(self.codebook.weight,'n d -> d n'))
+            torch.einsum('bd,dn->bn',x_flattened, einops.rearrange(self.codebook.weight,'n d -> d n'))
         min_encoding_indices = torch.argmin(d, dim=1).unsqueeze(1)
         
         min_encodings = torch.zeros( min_encoding_indices.shape[0] , self.codebook_size).to(x)
@@ -46,7 +46,7 @@ class VectorQuantizer(nn.Module):
         e_mean = torch.mean( min_encodings, dim=0)
         perplexity = torch.exp( -torch.sum( e_mean * torch.log(e_mean + 1e-10 )))
         # reshape to match original input shape
-        x_quantized = torch.rearrange(x_quantized, 'b h w c  -> b c h w').contiguous()
+        x_quantized = einops.rearrange(x_quantized, 'b h w c  -> b c h w').contiguous()
         
         return x_quantized,loss,(perplexity,min_encodings,min_encoding_indices)
     def get_codebook_entry(self,indices,shape):
@@ -54,5 +54,5 @@ class VectorQuantizer(nn.Module):
         if shape is not None:
             x_quantized = x_quantized.view(shape)
             # reshape to match original input shape
-            x_quantized = torch.rearrange(x_quantized, 'b h w c -> b c h w').contiguous()
+            x_quantized = einops.rearrange(x_quantized, 'b h w c -> b c h w').contiguous()
         return x_quantized

@@ -1,6 +1,5 @@
+import torch
 from torch.nn import functional as F, Linear, Module, Parameter, Sequential , Dropout , RMSNorm , GELU ,init 
-from torch import exp , Tensor, tensor,  unsqueeze , sqrt 
-
 from typing import Callable
 
 class DIFFLINattn(Module):
@@ -20,9 +19,9 @@ class DIFFLINattn(Module):
     self.W_k = Linear( in_features=self.in_features, out_features=config.out_features,bias=config.bias)
     self.W_q = Linear( in_features=self.in_features, out_features=config.out_features,bias=config.bias)
     self.W_v = Linear( in_features=self.in_features, out_features=config.out_features,bias=config.bias)
-    self.register_buffer("scale" , 1/ sqrt( tensor(config.out_features//2)) )
-    self.lambda_params = Parameter( tensor(4 * [lmbda]) )
-    self.lambda_init= 0.8 - 0.6 * exp( tensor(-0.3 * ( layer - 1)) )
+    self.register_buffer("scale" , 1/ torch.sqrt( torch.tensor(config.out_features//2)) )
+    self.lambda_params = Parameter( torch.tensor(4 * [lmbda]) )
+    self.lambda_init= 0.8 - 0.6 * torch.exp( torch.tensor(-0.3 * ( layer - 1)) )
     self.head_dim = config.out_features // config.num_heads
     assert self.head_dim * config.num_heads == config.out_features , (f" embedding dimension={config.out_features} must be divisible "
                                                      f"by number of heads={config.num_heads}" )
@@ -42,8 +41,8 @@ class DIFFLINattn(Module):
     if isinstance(m, (Linear)):
       init.orthogonal_(m.weight)
 
-  def forward(self,x:Tensor,
-              inverse:bool =False)->Tensor:
+  def forward(self,x:torch.Tensor,
+              inverse:bool =False)->torch.Tensor:
     assert len( x.shape ) >= 2, f"expected x with at least 2 dimensions"
     if len(x.shape) == 2:
       x = unsqueeze(x, 1)
@@ -60,7 +59,7 @@ class DIFFLINattn(Module):
 
     attn_w2 = self.kernel(Q_2) @ (self.kernel(K_2).transpose(-1,-2) * self.scale @ V)
 
-    exps = exp( self.lambda_params[[0,2]] * self.lambda_params[[1,3]])
+    exps = torch.exp( self.lambda_params[[0,2]] * self.lambda_params[[1,3]])
     self.lmbda = exps[0] - exps[1] + self.lambda_init
 
     attn = attn_w2 - self.lmbda * attn_w1 if inverse else attn_w1 - self.lmbda * attn_w2
@@ -101,12 +100,16 @@ class SDPA(Module):
         self.postnorm = RMSNorm(config.out_features)
 
         self.apply(self.init_weights)
-  @staticmethod
-  def init_weights(m:Module|Sequential)->None:
-    if isinstance(m, (Linear)):
-      init.orthogonal_(m.weight)
 
-def forward(self,x:Tensor)->Tensor:
+
+@staticmethod
+def init_weights(m:Module)->None:
+  if isinstance(m,(Conv2d,Linear,Parameter)):
+    init.orthogonal_(m.weight)
+    if m.bias is not None:
+      init.constant_(m.bias, 0)        
+        
+def forward(self,x:torch.Tensor)->torch.Tensor:
     assert len( x.shape ) >= 2, f"expected x with at least 2 dimensions"
     if len(x.shape) == 2:
       x = unsqueeze(x, 1)
